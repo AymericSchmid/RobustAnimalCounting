@@ -11,23 +11,21 @@ from torch.utils.data import Dataset
 
 @dataclass
 class SampleAnnotation:
-
-    boxes = None
-    labels = None
-    points = None
-    count = None
-    image_size = None
-    metadata = {}
+    boxes: Tensor | None = None
+    labels: Tensor | None = None
+    points: Tensor | None = None
+    count: int | None = None
+    image_size: tuple[int, int] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self):
-        """Convert the annotation to a dictionary format"""
         return {
             "boxes": self.boxes,
             "labels": self.labels,
             "points": self.points,
             "count": self.count,
             "image_size": self.image_size,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
     
 class BaseAnimalCountingDataset(Dataset, ABC):
