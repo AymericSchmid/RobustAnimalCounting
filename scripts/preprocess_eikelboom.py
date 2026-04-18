@@ -8,6 +8,7 @@ OUT_DIR = Path("/storage/homefs/as26q834/RobustAnimalCounting/data/splits/eikelb
 
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    IMG_DIR = OUT_DIR / "images"
 
     # load raw annotations
     ann_path = RAW_DIR / "annotations_images.csv"
@@ -31,12 +32,10 @@ def main():
         "test": set(test_imgs),
     }
 
-    # create output folders
-    for split in splits:
-        (OUT_DIR / split).mkdir(parents=True, exist_ok=True)
-
     # copy images
     print("Copying images...")
+
+    IMG_DIR.mkdir(parents=True, exist_ok=True)
 
     for img_name in images:
         found = False
@@ -45,13 +44,10 @@ def main():
         for folder in ["train", "val", "test"]:
             src_path = RAW_DIR / folder / img_name
             if src_path.exists():
+                print(src_path)
                 found = True
-                
-                for split, img_set in splits.items():
-                    if img_name in img_set:
-                        dst_path = OUT_DIR / split / img_name
-                        shutil.copy(src_path, dst_path)
-                        break
+                dst_path = IMG_DIR / ""
+                shutil.copy(src_path, dst_path)
                 break
         
         if not found:

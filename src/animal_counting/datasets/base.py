@@ -47,7 +47,6 @@ class BaseAnimalCountingDataset(Dataset, ABC):
 
     def __getitem__(self, index):
         sample_info = self.samples[index]
-
         image_path = Path(sample_info["image_path"])
         image_id = str(sample_info["image_id"])
 
@@ -145,7 +144,7 @@ class BaseAnimalCountingDataset(Dataset, ABC):
         """Convert boxes to float32 tensor of shape [N, 4]"""
         if boxes is None:
             return None
-        
+
         if isinstance(boxes, Tensor):
             result = boxes.to(dtype=torch.float32)
         else:
@@ -203,6 +202,20 @@ class BaseAnimalCountingDataset(Dataset, ABC):
         converted = boxes_tensor.clone()
         converted[:, 2] = converted[:, 0] + converted[:, 2]
         converted[:, 3] = converted[:, 1] + converted[:, 3]
+        return converted
+
+    @staticmethod
+    def xyxy_to_xywh(boxes):
+        """Convert boxes from [x_min, y_min, x_max, y_max] to [x_center, y_center, width, height]"""
+        boxes_tensor = BaseAnimalCountingDataset.ensure_tensor_boxes(boxes)
+        if boxes_tensor is None:
+            return torch.zeros((0,4), dtype=torch.float32)
+        
+        converted = boxes_tensor.clone()
+        converted[:, 2] = converted[:, 2] - converted[:, 0]
+        converted[:, 3] = converted[:, 3] - converted[:, 1]
+        converted[:, 0] = converted[:, 0] + converted[:, 2] / 2
+        converted[:, 1] = converted[:, 1] + converted[:, 3] / 2
         return converted
     
     @classmethod
