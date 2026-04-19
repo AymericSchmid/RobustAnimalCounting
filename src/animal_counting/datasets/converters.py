@@ -49,9 +49,10 @@ def export_to_yolo(dataset, dataset_dir):
         yaml_path = dataset_dir / "data.yaml"
 
         data = {
-            "train": str(dataset_dir / "images" / "train"),
-            "val": str(dataset_dir / "images" / "val"),
-            "test": str(dataset_dir / "images" / "test"),
+            "path": str(dataset_dir),
+            "train": str("images" / "train"),
+            "val": str("images" / "val"),
+            "test": str("images" / "test"),
             "nc": 1,             # only one class in YOLO
             "names": ["animal"]  # name for the single class
         }
