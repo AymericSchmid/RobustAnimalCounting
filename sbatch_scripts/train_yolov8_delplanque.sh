@@ -16,4 +16,4 @@ module load Anaconda3
 eval "$(conda shell.bash hook)"
 conda activate animal_counting
 
-python $PYTHON_SCRIPT --dataset eikelboom
+python $PYTHON_SCRIPT --dataset delplanque

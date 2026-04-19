@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from animal_counting.datasets.eikelboom import EikelboomDataset
+from animal_counting.datasets.delplanque import DelplanqueDataset
 from animal_counting.datasets.converters import export_to_yolo
 
 def parse_args():
@@ -17,16 +18,13 @@ def parse_args():
 def get_dataset(name, root, split):
     if name == "eikelboom":
         return EikelboomDataset(root, split=split)
+    elif name == "delplanque":
+        return DelplanqueDataset(root, split=split)
     else:
         raise ValueError(f"Unsupported dataset: {name}")
     
 def get_labels_map(name):
-    name = name.lower()
-
-    if name == "eikelboom":
-        return 0
-    
-    raise ValueError(f"Unsupported dataset: {name}")
+    return 0 # all animals mapped to label 0 for counting task
 
 def convert_to_yolo(dataset_name, root, output):
     dataset_dir = Path(output)

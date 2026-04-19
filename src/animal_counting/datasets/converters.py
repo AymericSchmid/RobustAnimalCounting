@@ -50,9 +50,9 @@ def export_to_yolo(dataset, dataset_dir):
 
         data = {
             "path": str(dataset_dir),
-            "train": str("images" / "train"),
-            "val": str("images" / "val"),
-            "test": str("images" / "test"),
+            "train": "images" + "/train",
+            "val": "images" + "/val",
+            "test": "images" + "/test",
             "nc": 1,             # only one class in YOLO
             "names": ["animal"]  # name for the single class
         }

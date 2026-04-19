@@ -6,23 +6,24 @@ DATASETS = {
         "type": "file",
         "filename": "eikelboom.zip",
     },
-    "qian_penguins": {
-        "url": "blabla",  
-        "type": "file",
-        "filename": "penguins.zip",
-    },
-    "waid": {
-        "url": "blabla",
-        "type": "git",
-    },
-    "aed": {
-        "url": "blabla",
-        "type": "file",
-        "filename": "aed.zip",
-    },
+    #"qian_penguins": {
+    #    "url": "blabla",  
+    #    "type": "file",
+    #    "filename": "penguins.zip",
+    #},
+    #"waid": {
+    #    "url": "blabla",
+    #    "type": "git",
+    #},
+    #"aed": {
+    #    "url": "blabla",
+    #    "type": "file",
+    #    "filename": "aed.zip",
+    #},
     "delplanque": {
-        "url": None,  # manual
-        "type": "manual",
+        "url": "https://dataverse.uliege.be/api/access/datafile/11098",
+        "type": "file",
+        "filename": "delplanque.zip",
     },
 }
 
