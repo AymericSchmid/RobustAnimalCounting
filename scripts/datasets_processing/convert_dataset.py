@@ -5,6 +5,8 @@ from pathlib import Path
 
 from animal_counting.datasets.eikelboom import EikelboomDataset
 from animal_counting.datasets.delplanque import DelplanqueDataset
+from animal_counting.datasets.waid import WAIDDataset
+from animal_counting.datasets.qian_penguins import QianPenguinsDataset
 from animal_counting.datasets.converters import export_to_yolo
 
 def parse_args():
@@ -20,6 +22,10 @@ def get_dataset(name, root, split):
         return EikelboomDataset(root, split=split)
     elif name == "delplanque":
         return DelplanqueDataset(root, split=split)
+    elif name == "waid":
+        return WAIDDataset(root, split=split)
+    elif name == "qian_penguins":
+        return QianPenguinsDataset(root, split=split)
     else:
         raise ValueError(f"Unsupported dataset: {name}")
     

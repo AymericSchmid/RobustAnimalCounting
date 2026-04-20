@@ -6,15 +6,14 @@ DATASETS = {
         "type": "file",
         "filename": "eikelboom.zip",
     },
-    #"qian_penguins": {
-    #    "url": "blabla",  
-    #    "type": "file",
-    #    "filename": "penguins.zip",
-    #},
-    #"waid": {
-    #    "url": "blabla",
-    #    "type": "git",
-    #},
+    "qian_penguins": {
+        "url": "https://doi.org/10.5061/dryad.8931zcrv8",
+        "type": "manual",
+    },
+    "waid": {
+        "url": "https://github.com/xiaohuicui/WAID.git",
+        "type": "git",
+    },
     #"aed": {
     #    "url": "blabla",
     #    "type": "file",
