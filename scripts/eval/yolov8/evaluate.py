@@ -93,13 +93,23 @@ def print_summary(val_metrics, counting_results):
             print(f"  {k:16s} {m[k]:.4f}")
 
 
-def save_results(out_dir, args, val_metrics, counting_results,
-                 image_ids, pred_counts, gt_counts, n_samples):
+def save_results(out_dir, args, val_metrics, counting_results, n_samples):
     """Save detection/counting metrics, per-image predictions and config to disk."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     metrics_dump = {
+        "config": {
+            "train_dataset": args.train_dataset,
+            "test_dataset": args.test_dataset,
+            "split": args.split,
+            "weights": str(args.weights),
+            "conf": args.conf,
+            "iou": args.iou,
+            "imgsz": args.imgsz,
+            "mode": args.mode,
+            "n_samples": n_samples,
+        },
         "detection": {
             "mAP50": float(val_metrics.box.map50),
             "mAP50_95": float(val_metrics.box.map),
@@ -108,29 +118,9 @@ def save_results(out_dir, args, val_metrics, counting_results,
         },
         "counting": counting_results,
     }
-    with (out_dir / "metrics.json").open("w") as f:
+    with (out_dir / "results.json").open("w") as f:
         json.dump(metrics_dump, f, indent=2)
 
-    per_image = [
-        {"image_id": iid, "pred_count": pc, "gt_count": gc}
-        for iid, pc, gc in zip(image_ids, pred_counts, gt_counts)
-    ]
-    with (out_dir / "per_image.json").open("w") as f:
-        json.dump(per_image, f, indent=2)
-
-    config_log = {
-        "train_dataset": args.train_dataset,
-        "test_dataset": args.test_dataset,
-        "split": args.split,
-        "weights": str(args.weights),
-        "conf": args.conf,
-        "iou": args.iou,
-        "imgsz": args.imgsz,
-        "mode": args.mode,
-        "n_samples": n_samples,
-    }
-    with (out_dir / "config.json").open("w") as f:
-        json.dump(config_log, f, indent=2)
 
     print(f"\nResults written to: {out_dir}")
 
@@ -187,7 +177,7 @@ def main():
     out_dir = ROOT / "results" / "yolov8" / "eval" / run_name
     save_results(
         out_dir, args, val_metrics, counting_results,
-        image_ids, pred_counts, gt_counts, len(dataset),
+        len(dataset),
     )
 
 
