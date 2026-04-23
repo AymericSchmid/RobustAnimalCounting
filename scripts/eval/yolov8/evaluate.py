@@ -32,6 +32,7 @@ from animal_counting.datasets.eikelboom import EikelboomDataset
 from animal_counting.datasets.qian_penguins import QianPenguinsDataset
 from animal_counting.datasets.waid import WAIDDataset
 from animal_counting.evaluation import evaluate_yolo_cross, evaluate_yolo_density
+from animal_counting.evaluation.density_bucket import split_by_density
 from animal_counting.models.yolov8 import YOLOv8CountingModel
 
 
@@ -249,19 +250,23 @@ def main():
     val_per_bucket = {}
     if args.mode == "density":
         print("\nRunning Ultralytics val() — per density bucket...")
+        density_split = split_by_density(image_ids, pred_counts, gt_counts)
         with tempfile.TemporaryDirectory(prefix="yolo_bucket_") as tmp:
             tmp_root = Path(tmp)
-            for bucket, m in counting_results.items():
-                if bucket == "overall" or "image_ids" not in m:
-                    continue
-                sub_yaml = split_yaml_by_bucket(
-                    data_yaml, args.split, m["image_ids"], tmp_root, bucket
-                )
-                if sub_yaml is None:
+            for bucket, bucket_data in density_split.items():
+                ids = bucket_data["image_ids"]
+                if not ids:
                     print(f"  [{bucket}] empty bucket — skipping")
                     val_per_bucket[bucket] = None
                     continue
-                print(f"  [{bucket}] running val() on {len(m['image_ids'])} images...")
+                sub_yaml = split_yaml_by_bucket(
+                    data_yaml, args.split, ids, tmp_root, bucket
+                )
+                if sub_yaml is None:
+                    print(f"  [{bucket}] no matching files — skipping")
+                    val_per_bucket[bucket] = None
+                    continue
+                print(f"  [{bucket}] running val() on {len(ids)} images...")
                 raw = model.val(data=str(sub_yaml), split=args.split, imgsz=args.imgsz)
                 val_per_bucket[bucket] = val_metrics_to_dict(raw)
 
