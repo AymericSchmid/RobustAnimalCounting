@@ -8,10 +8,10 @@ def evaluate_yolo_density(image_ids, pred_counts, gt_counts):
     results = {"overall": count_metrics(pred_counts, gt_counts)}
 
     # Per density value
-    groups = split_by_density(image_ids, pred_counts, gt_counts)
-    for name in density_list:
-        g = groups[name]
-        results[name] = count_metrics(g["pred_counts"], g["gt_counts"])
+    density_groups = split_by_density(image_ids, pred_counts, gt_counts)
+    for density_name in density_list:
+        g = density_groups[density_name]
+        results[density_name] = count_metrics(g["pred_counts"], g["gt_counts"])
     return results
 
 
@@ -26,15 +26,15 @@ def evaluate_csrnet_density(image_ids, pred_counts, gt_counts,
     results["overall"].update(compute_ssim_metrics(pred_maps, gt_maps))
 
     # Per density metric
-    groups = split_by_density(image_ids, pred_counts, gt_counts)
-    for name in density_list:
-        g = groups[name]
+    density_groups = split_by_density(image_ids, pred_counts, gt_counts)
+    for density_name in density_list:
+        g = density_groups[density_name]
         indices = g["indices"]
         bucket_pred_maps = [pred_maps[i] for i in indices]
         bucket_gt_maps   = [gt_maps[i]   for i in indices]
-        results[name] = count_metrics(g["pred_counts"], g["gt_counts"])
-        results[name].update(compute_ssim_metrics(bucket_pred_maps,
-                                                   bucket_gt_maps))
+        results[density_name] = count_metrics(g["pred_counts"], g["gt_counts"])
+        results[density_name].update(compute_ssim_metrics(bucket_pred_maps,
+                                                           bucket_gt_maps))
     return results
 
 
@@ -49,10 +49,10 @@ def evaluate_p2pnet_density(image_ids, pred_counts, gt_counts):
     results = {"overall": count_metrics(pred_counts, gt_counts)}
 
     # Per density metric
-    groups = split_by_density(image_ids, pred_counts, gt_counts)
-    for name in density_list:
-        g = groups[name]
-        results[name] = count_metrics(g["pred_counts"], g["gt_counts"])
+    density_groups = split_by_density(image_ids, pred_counts, gt_counts)
+    for density_name in density_list:
+        g = density_groups[density_name]
+        results[density_name] = count_metrics(g["pred_counts"], g["gt_counts"])
     return results
 
 

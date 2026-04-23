@@ -1,12 +1,13 @@
 density_list = ["sparse", "medium", "crowded"]
+LIMITS = [10, 50]  # Define the limits for the density buckets
 
 def classify_by_density(gt_count: int) -> str:
-    if gt_count < 10:
-        return "sparse"
-    elif gt_count < 50:
-        return "medium"
+    if gt_count <= LIMITS[0]:
+        return density_list[0]  # "sparse"
+    elif gt_count <= LIMITS[1]:
+        return density_list[1]  # "medium"
     else:
-        return "crowded"
+        return density_list[2]  # "crowded"
 
 def split_by_density(image_ids, pred_counts, gt_counts):
     if not (len(image_ids) == len(pred_counts) == len(gt_counts)):
