@@ -32,7 +32,7 @@ from animal_counting.datasets.eikelboom import EikelboomDataset
 from animal_counting.datasets.qian_penguins import QianPenguinsDataset
 from animal_counting.datasets.waid import WAIDDataset
 from animal_counting.evaluation import evaluate_yolo_cross, evaluate_yolo_density
-from animal_counting.evaluation.density_bucket import split_by_density
+from animal_counting.evaluation.density_buckets import split_by_density
 from animal_counting.models.yolov8 import YOLOv8CountingModel
 
 
