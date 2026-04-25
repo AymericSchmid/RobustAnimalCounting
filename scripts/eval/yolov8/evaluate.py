@@ -1,5 +1,7 @@
 """Evaluate a trained YOLOv8 checkpoint on one of the project datasets.
 
+Usage (from the repo root):
+
     # In-domain (trained and tested on Eikelboom, with density buckets)
     PYTHONPATH=src python scripts/eval/yolov8/evaluate.py \\
         --train-dataset eikelboom \\
@@ -39,7 +41,7 @@ from animal_counting.datasets.waid import WAIDDataset
 from animal_counting.evaluation import (
     evaluate_yolo_cross,
     evaluate_yolo_density,
-    split_density,
+    split_by_density,
 )
 from animal_counting.models.yolov8 import YOLOv8CountingModel
 
@@ -233,12 +235,13 @@ def main():
 
     # Per-bucket detection metrics (density mode only)
     if args.mode == "density":
-        buckets_ids = split_density(image_ids, gt_counts)
+        buckets_ids = split_by_density(image_ids, pred_counts, gt_counts)
         id_to_path = dict(zip(image_ids, image_paths))
         bucket_root = ROOT / "data" / "yolo" / args.test_dataset / "buckets"
 
         print("\nRunning Ultralytics val() — per bucket...")
-        for bucket_name, ids in buckets_ids.items():
+        for bucket_name, bucket_data in buckets_ids.items():
+            ids = bucket_data["image_ids"]
             paths = [id_to_path[i] for i in ids if i in id_to_path]
             if not paths:
                 print(f"  [{bucket_name}] empty — skipped")
@@ -256,8 +259,8 @@ def main():
     # Print and save
     print_summary(detection_results, counting_results)
 
-    out_path = (ROOT / "results" / "yolov8" / (args.train_dataset or "unknown")
-                / "eval" / f"{args.test_dataset}_{args.mode}.json")
+    out_path = (ROOT / "results" / "yolov8"
+                / f"{args.train_dataset or 'unknown'}_{args.test_dataset}_{args.mode}.json")
     save_results(out_path, args, detection_results, counting_results)
 
 
