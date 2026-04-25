@@ -127,12 +127,11 @@ def get_or_make_bucket_yaml(data_yaml, split, image_paths, bucket_root, bucket_n
     # Write the image list
     list_file.write_text("\n".join(str(p) for p in image_paths))
 
-    # Build the per-bucket yaml: same nc/names, but split points to the list file
+    # Build the per-bucket yaml: same nc/names/train/val/path as the original,
+    # but the `split` entry points to our list file (absolute path). Ultralytics
+    # requires `train` and `val` keys to be present even when validating on
+    # `test`, so we leave them untouched.
     new_cfg = {**cfg, split: str(list_file)}
-    new_cfg.pop("path", None)  # absolute paths in the txt, no base needed
-    for k in ("train", "val", "test"):
-        if k != split:
-            new_cfg.pop(k, None)
 
     with open(bucket_yaml, "w") as f:
         yaml.safe_dump(new_cfg, f)
