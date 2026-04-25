@@ -227,7 +227,11 @@ PYTHONPATH=src python scripts/eval/csrnet/evaluate.py \
     --mode cross
 ```
 
-Use `--max-size 1024` (the default) to cap large aerial images and avoid running out of GPU memory. Results are saved as JSON in `results/csrnet/`.
+Results are saved as JSON in `results/csrnet/`. The script prints MAE, RMSE, relative error, and SSIM — overall and per density bucket.
+
+**Memory note:** large aerial images are automatically resized to fit within 1024px on the longest side before inference (the `--max-size` flag, default 1024). Dimensions are then rounded up to the nearest multiple of 8, which is a hard requirement from the three VGG max-pool layers. Pass `--max-size 0` to use full resolution if GPU memory allows.
+
+**How GT density maps are generated:** the script builds them on-the-fly from point annotations (or bounding-box centroids for box-only datasets) using the same adaptive Gaussian formula as during training (`σ = 0.3 × mean distance to 3 nearest neighbours`). They are then downsampled by 8 to match the network output size before SSIM is computed.
 
 ---
 
