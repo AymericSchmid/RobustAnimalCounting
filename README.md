@@ -98,56 +98,91 @@ animal-counting/
     └── project_notes.md
 ---
 
-## Current Status
+## Current status
 
 ### Datasets
 
-| Dataset | Annotations | Wrapper | Preprocessed | YOLO-converted | Status |
-|---------|-------------|---------|-------------|----------------|--------|
-| Eikelboom | 4,305 boxes | ✅ `eikelboom.py` | ✅ `preprocess_eikelboom.py` | ✅ | Ready |
-| Delplanque | 10,239 boxes | ✅ `delplanque.py` | ✅ `preprocess_delplanque.py` | ✅ | Ready |
-| WAID | 233,806 boxes | ✅ `waid.py` | ✅ `preprocess_waid.py` | ✅ | Ready |
-| Qian Penguins | 134,767 points | ✅ `qian_penguins.py` | ✅ `preprocess_qian.py` | ✅ | Ready |
-| AED | ~15,581 points | ⬚ | ⬚ | ⬚ | Deprioritized |
+| Dataset | Annotations | Wrapper | Preprocessed | YOLO-converted | Role | Status |
+|---------|-------------|---------|-------------|----------------|------|--------|
+| Eikelboom | 4,305 boxes | ✅ | ✅ | ✅ | Train + test | Ready |
+| Delplanque | 10,239 boxes | ✅ | ✅ | ✅ | Train + test | Ready |
+| WAID | 233,806 boxes | ✅ | ✅ | ✅ | **Test only** | Ready |
+| Qian Penguins | 134,767 points | ✅ | ✅ | ✅ | Train + test | Ready |
+| AED | ~15,581 points | ⬚ | ⬚ | ⬚ | Test only | Deprioritized |
+
+**Why WAID is test-only:** WAID is the "unseen environment" dataset. Training on it would consume the only dataset we have to measure generalization degradation (H4). It stays held out.
 
 ### Models
 
-**Note: P2PNet has been dropped due to project timeline.** The comparison is now between YOLOv8 (detection) and CSRNet (density map) across the datasets.
+P2PNet has been dropped due to project timeline. The comparison is YOLOv8 (detection) vs CSRNet (density map).
 
-| Model | Paradigm | Wrapper | Training script | Sbatch script | Status |
-|-------|----------|---------|----------------|---------------|--------|
-| YOLOv8 | Detection | ✅ `models/yolov8.py` | ✅ `train/yolov8/train_eikelboom.py` | ✅ | Working |
-| CSRNet | Density map | ✅ `models/csrnet.py` | ✅ `train/csrnet/train_qian.py` | ✅ | Ready to train |
-| P2PNet | Transformer | — | — | — | **Dropped** |
+| Model | Paradigm | Wrapper | Status |
+|-------|----------|---------|--------|
+| YOLOv8 | Detection | ✅ `models/yolov8.py` | Implemented |
+| CSRNet | Density map | ✅ `models/csrnet.py` | Implemented |
+| P2PNet | Transformer | — | **Dropped** |
 
-### Evaluation
+### Evaluation module
 
-The `evaluation/` module is fully implemented:
-- `counting_metrics.py` — MAE, RMSE, relative error
-- `density_buckets.py` — splits images into sparse (≤10), medium (10–50), crowded (>50) buckets
-- `density_map_metrics.py` — SSIM between predicted and ground-truth density maps
-- `paradigm_runners.py` — `evaluate_csrnet_density`, `evaluate_yolo_density`, `evaluate_yolo_cross`, `evaluate_csrnet_cross`
-- `scripts/eval/yolov8/evaluate.py` — ready-to-run CLI evaluation script
+| File | What it provides |
+|------|-----------------|
+| `evaluation/counting_metrics.py` | MAE, RMSE, relative error |
+| `evaluation/density_buckets.py` | Splits images into sparse (≤10), medium (10–50), crowded (>50) |
+| `evaluation/density_map_metrics.py` | SSIM between predicted and GT density maps |
+| `evaluation/paradigm_runners.py` | `evaluate_yolo_density/cross`, `evaluate_csrnet_density/cross` |
+| `scripts/eval/yolov8/evaluate.py` | CLI for YOLOv8 evaluation |
+| `scripts/eval/csrnet/evaluate.py` | CLI for CSRNet evaluation |
 
-`YOLOv8CountingModel.predict()` is also now fully implemented.
+---
+
+## Experimental design
+
+### Why these datasets, why these training runs
+
+The project compares two models (YOLOv8, CSRNet) across different density regimes and environments. For a fair comparison, both models need to be trained and tested **on the same data**. That drives the training choices:
+
+| Training run | Script | Why |
+|---|---|---|
+| YOLOv8 on Eikelboom | `train/yolov8/train_eikelboom.py` | Primary sparse/detection dataset (H1) |
+| CSRNet on Eikelboom | `train/csrnet/train_eikelboom.py` | Same data as above so models are directly comparable on H1 |
+| CSRNet on Qian Penguins | `train/csrnet/train_qian.py` | Primary dense/crowd dataset (H2) |
+| YOLOv8 on Delplanque | `train/yolov8/train_eikelboom.py` (Delplanque version) | Needed to run the reverse cross-domain experiment (H4) |
+
+### How each hypothesis is tested
+
+| Hypothesis | What we measure | Train on | Test on | Eval mode |
+|---|---|---|---|---|
+| **H1** — Detection best in sparse scenes | MAE in the sparse bucket (1–10 animals), YOLOv8 vs CSRNet | Eikelboom | Eikelboom (test split) | `--mode density` |
+| **H2** — Density maps best in crowded scenes | MAE in the crowded bucket (50+ animals), YOLOv8 vs CSRNet | Qian Penguins | Qian Penguins (test split) | `--mode density` |
+| **H4** — Cross-domain gap > in-domain gap | In-domain MAE vs MAE on a completely different environment | Eikelboom | WAID, Delplanque | `--mode cross` |
+| **H4 (reverse)** | Same, from the other direction | Delplanque | Eikelboom, WAID | `--mode cross` |
+
+> H3 (transformer robustness) was dropped along with P2PNet.
+
+### Full experiment matrix
+
+Once all models are trained, run this full set of evaluations:
+
+| Train | Test | Answers |
+|---|---|---|
+| YOLOv8 (Eikelboom) | Eikelboom | H1 — in-domain sparse |
+| CSRNet (Eikelboom) | Eikelboom | H1 — comparison on same data |
+| CSRNet (Qian Penguins) | Qian Penguins | H2 — in-domain crowded |
+| YOLOv8 (Eikelboom) | Qian Penguins | H2 — comparison on same data |
+| YOLOv8 (Eikelboom) | Delplanque | H4 — cross-domain (same habitat, different species) |
+| YOLOv8 (Eikelboom) | WAID | H4 — cross-domain (different environment) |
+| CSRNet (Eikelboom) | Delplanque | H4 — CSRNet cross-domain comparison |
+| CSRNet (Eikelboom) | WAID | H4 — CSRNet cross-domain comparison |
+| YOLOv8 (Delplanque) | Eikelboom | H4 — reverse direction |
 
 ---
 
 ## What remains to do
 
-### Must-do before results
-
-- [ ] **Run the smoke-test notebook** (`notebooks/2_test_csrnet_pipeline.ipynb`) on the cluster to confirm everything works before submitting jobs
-- [ ] **Train YOLOv8** on Eikelboom and Delplanque — submit the existing sbatch scripts
-- [ ] **Train CSRNet** on Qian Penguins — submit `sbatch_scripts/train_csrnet_qian.sh`
-- [ ] **Run per-density evaluation** for YOLOv8 (script ready: `scripts/eval/yolov8/evaluate.py --mode density`)
-- [ ] **Run cross-domain evaluation** for YOLOv8 (same script: `--mode cross`, e.g. Eikelboom → Delplanque)
-- [ ] **Run CSRNet evaluation** — script is ready at `scripts/eval/csrnet/evaluate.py` (see cluster workflow below)
-
-### Nice to have
-
-- [ ] **CSRNet on box-annotation datasets** — `DensityMapDataset` already supports box→centroid conversion; a training script for Eikelboom/WAID would enable cross-domain CSRNet experiments
-- [ ] **Results notebook** — visualize density maps, detection boxes, and per-bucket bar charts for the paper
+- [ ] Run the smoke-test notebook on the cluster (`notebooks/2_test_csrnet_pipeline.ipynb`) before submitting any jobs
+- [ ] Train all 4 models — submit sbatch scripts (see cluster workflow below)
+- [ ] Run the full experiment matrix above once training is complete
+- [ ] Results notebook — visualize density maps, detection boxes, per-bucket bar charts for the paper
 
 ---
 
@@ -169,69 +204,89 @@ Open `notebooks/2_test_csrnet_pipeline.ipynb`, set `ROOT` in the first cell to y
 ### 2 · Submit training jobs
 
 ```bash
-sbatch sbatch_scripts/train_csrnet_qian.sh         # CSRNet on Qian Penguins (~12 h)
-sbatch sbatch_scripts/train_yolov8_eikelboom.sh    # YOLOv8 on Eikelboom    (~5 h)
-sbatch sbatch_scripts/train_yolov8_delplanque.sh   # YOLOv8 on Delplanque   (~5 h)
+sbatch sbatch_scripts/train_yolov8_eikelboom.sh    # YOLOv8 on Eikelboom      (~5 h)
+sbatch sbatch_scripts/train_yolov8_delplanque.sh   # YOLOv8 on Delplanque     (~5 h)
+sbatch sbatch_scripts/train_csrnet_qian.sh         # CSRNet on Qian Penguins  (~12 h)
+sbatch sbatch_scripts/train_csrnet_eikelboom.sh    # CSRNet on Eikelboom      (~12 h)
 ```
 
-Monitor progress:
+All four can run in parallel if enough GPUs are available. Monitor progress:
 
 ```bash
 squeue -u $USER                                         # see running jobs
-tail -f sbatch_scripts/logs/<job_name>_<job_id>.logs    # live output
+tail -f sbatch_scripts/logs/<job_name>_<job_id>.logs    # live output per job
 ```
 
-CSRNet prints `val_MAE` and `val_RMSE` every epoch and saves `results/csrnet/qian_penguins/best.pth` whenever the MAE improves. It stops automatically after 20 epochs without improvement.
+CSRNet prints `val_MAE` and `val_RMSE` every epoch and saves `best.pth` whenever the MAE improves. It stops automatically after 20 epochs without improvement.
 
-### 3 · Run evaluation (after training completes)
+### 3 · Run the full experiment matrix (after training completes)
 
-#### YOLOv8 — in-domain with density buckets (for H1)
+Run every command below — each corresponds to one row in the experiment matrix above. Results are saved automatically as JSON files in `results/yolov8/` and `results/csrnet/`.
+
+#### H1 — sparse scene comparison (both models on Eikelboom)
 
 ```bash
+# YOLOv8 in-domain on Eikelboom, per density bucket
 PYTHONPATH=src python scripts/eval/yolov8/evaluate.py \
-    --train-dataset eikelboom \
-    --test-dataset  eikelboom \
-    --weights results/yolov8/eikelboom/weights/best.pt \
-    --mode density
+    --train-dataset eikelboom --test-dataset eikelboom \
+    --weights results/yolov8/eikelboom/weights/best.pt --mode density
+
+# CSRNet in-domain on Eikelboom, per density bucket
+PYTHONPATH=src python scripts/eval/csrnet/evaluate.py \
+    --train-dataset eikelboom --test-dataset eikelboom \
+    --weights results/csrnet/eikelboom/best.pth --mode density
 ```
 
-#### YOLOv8 — cross-domain (for H4)
+#### H2 — crowded scene comparison (both models on Qian Penguins)
 
 ```bash
+# CSRNet in-domain on Qian Penguins, per density bucket
+PYTHONPATH=src python scripts/eval/csrnet/evaluate.py \
+    --train-dataset qian_penguins --test-dataset qian_penguins \
+    --weights results/csrnet/qian_penguins/best.pth --mode density
+
+# YOLOv8 cross-domain on Qian Penguins (trained on Eikelboom — comparison point)
 PYTHONPATH=src python scripts/eval/yolov8/evaluate.py \
-    --train-dataset eikelboom \
-    --test-dataset  delplanque \
-    --weights results/yolov8/eikelboom/weights/best.pt \
-    --mode cross
+    --train-dataset eikelboom --test-dataset qian_penguins \
+    --weights results/yolov8/eikelboom/weights/best.pt --mode density
 ```
 
-Results are saved as JSON in `results/yolov8/`. The script prints a summary table of MAE, RMSE, relative error, mAP@0.5, precision, and recall — overall and per density bucket.
-
-#### CSRNet — in-domain with density buckets (for H2)
+#### H4 — cross-domain generalization
 
 ```bash
+# YOLOv8 (Eikelboom) → Delplanque and WAID
+PYTHONPATH=src python scripts/eval/yolov8/evaluate.py \
+    --train-dataset eikelboom --test-dataset delplanque \
+    --weights results/yolov8/eikelboom/weights/best.pt --mode cross
+
+PYTHONPATH=src python scripts/eval/yolov8/evaluate.py \
+    --train-dataset eikelboom --test-dataset waid \
+    --weights results/yolov8/eikelboom/weights/best.pt --mode cross
+
+# CSRNet (Eikelboom) → Delplanque and WAID
 PYTHONPATH=src python scripts/eval/csrnet/evaluate.py \
-    --train-dataset qian_penguins \
-    --test-dataset  qian_penguins \
-    --weights results/csrnet/qian_penguins/best.pth \
-    --mode density
+    --train-dataset eikelboom --test-dataset delplanque \
+    --weights results/csrnet/eikelboom/best.pth --mode cross
+
+PYTHONPATH=src python scripts/eval/csrnet/evaluate.py \
+    --train-dataset eikelboom --test-dataset waid \
+    --weights results/csrnet/eikelboom/best.pth --mode cross
+
+# Reverse direction: YOLOv8 (Delplanque) → Eikelboom and WAID
+PYTHONPATH=src python scripts/eval/yolov8/evaluate.py \
+    --train-dataset delplanque --test-dataset eikelboom \
+    --weights results/yolov8/delplanque/weights/best.pt --mode cross
+
+PYTHONPATH=src python scripts/eval/yolov8/evaluate.py \
+    --train-dataset delplanque --test-dataset waid \
+    --weights results/yolov8/delplanque/weights/best.pt --mode cross
 ```
 
-#### CSRNet — cross-domain (for H4)
+**YOLOv8 metrics:** MAE, RMSE, relative error, mAP@0.5, precision, recall — overall and per density bucket.
 
-```bash
-PYTHONPATH=src python scripts/eval/csrnet/evaluate.py \
-    --train-dataset qian_penguins \
-    --test-dataset  eikelboom \
-    --weights results/csrnet/qian_penguins/best.pth \
-    --mode cross
-```
+**CSRNet metrics:** MAE, RMSE, relative error, SSIM — overall and per density bucket.
 
-Results are saved as JSON in `results/csrnet/`. The script prints MAE, RMSE, relative error, and SSIM — overall and per density bucket.
-
-**Memory note:** large aerial images are automatically resized to fit within 1024px on the longest side before inference (the `--max-size` flag, default 1024). Dimensions are then rounded up to the nearest multiple of 8, which is a hard requirement from the three VGG max-pool layers. Pass `--max-size 0` to use full resolution if GPU memory allows.
-
-**How GT density maps are generated:** the script builds them on-the-fly from point annotations (or bounding-box centroids for box-only datasets) using the same adaptive Gaussian formula as during training (`σ = 0.3 × mean distance to 3 nearest neighbours`). They are then downsampled by 8 to match the network output size before SSIM is computed.
+**CSRNet memory note:** images are automatically resized to fit within 1024px on the longest side before inference (`--max-size` flag, default 1024). Both dimensions are rounded up to the nearest multiple of 8, required by the three VGG max-pool layers. Pass `--max-size 0` for full resolution if GPU memory allows.
 
 ---
 
