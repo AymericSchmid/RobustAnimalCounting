@@ -122,109 +122,157 @@ animal-counting/
 
 ### Evaluation
 
-The `evaluation/` module is currently a placeholder. A teammate is implementing it on a separate branch. The `BaseCountingModel` base class already provides `evaluate_counts()` (MAE, RMSE, bias, MAPE) and `evaluate_dataset()`, which will be the foundation for the full evaluation pipeline.
+The `evaluation/` module is fully implemented:
+- `counting_metrics.py` — MAE, RMSE, relative error
+- `density_buckets.py` — splits images into sparse (≤10), medium (10–50), crowded (>50) buckets
+- `density_map_metrics.py` — SSIM between predicted and ground-truth density maps
+- `paradigm_runners.py` — `evaluate_csrnet_density`, `evaluate_yolo_density`, `evaluate_yolo_cross`, `evaluate_csrnet_cross`
+- `scripts/eval/yolov8/evaluate.py` — ready-to-run CLI evaluation script
+
+`YOLOv8CountingModel.predict()` is also now fully implemented.
 
 ---
 
 ## What remains to do
 
-### High priority (needed to produce results)
+### Must-do before results
 
-- [ ] **Train YOLOv8** on Eikelboom, WAID, Delplanque — run existing sbatch scripts
-- [ ] **Train CSRNet** on Qian Penguins — `sbatch sbatch_scripts/train_csrnet_qian.sh`
-- [ ] **Merge evaluation branch** and wire it up to both models' `predict()` output
-- [ ] **Per-density bucket evaluation** — bin test images into sparse (1–10), medium (10–50), crowded (50+) and report MAE/RMSE per bucket (H1 and H2)
-- [ ] **Cross-domain evaluation** — train on dataset A, test on dataset B (e.g., Eikelboom → Delplanque for H4)
+- [ ] **Run the smoke-test notebook** (`notebooks/2_test_csrnet_pipeline.ipynb`) on the cluster to confirm everything works before submitting jobs
+- [ ] **Train YOLOv8** on Eikelboom and Delplanque — submit the existing sbatch scripts
+- [ ] **Train CSRNet** on Qian Penguins — submit `sbatch_scripts/train_csrnet_qian.sh`
+- [ ] **Run per-density evaluation** for YOLOv8 (script ready: `scripts/eval/yolov8/evaluate.py --mode density`)
+- [ ] **Run cross-domain evaluation** for YOLOv8 (same script: `--mode cross`, e.g. Eikelboom → Delplanque)
+- [ ] **Write a CSRNet evaluation script** mirroring `scripts/eval/yolov8/evaluate.py` — the evaluation functions (`evaluate_csrnet_density`, `evaluate_csrnet_cross`) already exist
 
-### Medium priority
+### Nice to have
 
-- [ ] **Complete `YOLOv8CountingModel.predict()`** — currently a `pass`; needs to wrap ultralytics results into `PredictionResult`
-- [ ] **CSRNet on box-annotation datasets** — `DensityMapDataset` already supports box→centroid conversion; add a training script for Eikelboom/WAID to enable cross-domain comparison
-- [ ] **SSIM reporting** for CSRNet density maps (paper metric for spatial accuracy)
-
-### Low priority
-
-- [ ] **AED dataset** — wrapper + preprocessing (useful for cross-domain elephant experiments)
-- [ ] **Results notebook** — visualize density maps, detection boxes, per-bucket bar charts
+- [ ] **CSRNet on box-annotation datasets** — `DensityMapDataset` already supports box→centroid conversion; a training script for Eikelboom/WAID would enable cross-domain CSRNet experiments
+- [ ] **Results notebook** — visualize density maps, detection boxes, and per-bucket bar charts for the paper
 
 ---
 
-## Important note: PYTHONPATH
+## Cluster workflow (step by step)
 
-The project package isn't installed via pip yet. To run any script that imports
-from `animal_counting`, prefix your command with `PYTHONPATH=src`:
+Everything GPU-related runs on the cluster via Slurm. All commands below assume you are in the repo root.
+
+### 0 · Pull the latest code
+
+```bash
+git pull origin main
+conda activate animal_counting
+```
+
+### 1 · Verify everything works before submitting jobs
+
+Open `notebooks/2_test_csrnet_pipeline.ipynb`, set `ROOT` in the first cell to your cluster path, then run all cells top to bottom. Every cell should print ✓ or display a plot. If anything fails, do not submit training jobs yet.
+
+### 2 · Submit training jobs
+
+```bash
+sbatch sbatch_scripts/train_csrnet_qian.sh         # CSRNet on Qian Penguins (~12 h)
+sbatch sbatch_scripts/train_yolov8_eikelboom.sh    # YOLOv8 on Eikelboom    (~5 h)
+sbatch sbatch_scripts/train_yolov8_delplanque.sh   # YOLOv8 on Delplanque   (~5 h)
+```
+
+Monitor progress:
+
+```bash
+squeue -u $USER                                         # see running jobs
+tail -f sbatch_scripts/logs/<job_name>_<job_id>.logs    # live output
+```
+
+CSRNet prints `val_MAE` and `val_RMSE` every epoch and saves `results/csrnet/qian_penguins/best.pth` whenever the MAE improves. It stops automatically after 20 epochs without improvement.
+
+### 3 · Run evaluation (after training completes)
+
+#### YOLOv8 — in-domain with density buckets (for H1)
+
+```bash
+PYTHONPATH=src python scripts/eval/yolov8/evaluate.py \
+    --train-dataset eikelboom \
+    --test-dataset  eikelboom \
+    --weights results/yolov8/eikelboom/weights/best.pt \
+    --mode density
+```
+
+#### YOLOv8 — cross-domain (for H4)
+
+```bash
+PYTHONPATH=src python scripts/eval/yolov8/evaluate.py \
+    --train-dataset eikelboom \
+    --test-dataset  delplanque \
+    --weights results/yolov8/eikelboom/weights/best.pt \
+    --mode cross
+```
+
+Results are saved as JSON in `results/yolov8/`. The script prints a summary table of MAE, RMSE, relative error, mAP@0.5, precision, and recall — overall and per density bucket.
+
+#### CSRNet — evaluation script still to be written
+
+The evaluation functions (`evaluate_csrnet_density`, `evaluate_csrnet_cross`) are ready in `src/animal_counting/evaluation/paradigm_runners.py`. A script mirroring `scripts/eval/yolov8/evaluate.py` needs to be written for CSRNet. For the time being, the notebook (Section 5b) can be used to inspect predictions visually after training.
+
+---
+
+## Setup from scratch
+
+### Environment
+
+```bash
+conda env create -f environment.yml
+conda activate animal_counting
+```
+
+### Important: PYTHONPATH
+
+The package is not installed via pip. Always prefix scripts with `PYTHONPATH=src`:
 
 ```bash
 PYTHONPATH=src python scripts/datasets_processing/convert_dataset.py ...
 ```
 
-### How to set up a dataset
+### Dataset pipeline
 
-Every dataset follows the same 3-step pipeline:
+Every dataset goes through the same three steps.
 
-1. **Download** raw data into `data/raw/<name>/`
-2. **Preprocess** (creates `data/splits/<name>/annotations.csv` + copies images)
-3. **Convert** to model-specific format (e.g., YOLO)
-
-#### Box-annotation datasets (Eikelboom, Delplanque, WAID)
-
-The annotations.csv has columns: `image_path, x1, y1, x2, y2, species, split`.
-These work directly with YOLO and can also derive points (box centers) for CSRNet.
+**1 · Download** into `data/raw/<name>/`
 
 ```bash
-# Example: WAID
-git clone https://github.com/xiaohuicui/WAID.git data/raw/waid
-python scripts/datasets_processing/preprocess_waid.py
-PYTHONPATH=src python scripts/datasets_processing/convert_dataset.py \
-    --dataset waid --format yolo --root data/splits/waid --output data/yolo/waid
+python scripts/datasets_processing/download_datasets.py
+# Some datasets need manual download — see comments in datasets_list.py
 ```
 
-#### Point-annotation datasets (Qian Penguins)
-
-The annotations.csv has columns: `image_path, x, y, species, colony, split`.
-These are the native format for CSRNet. For YOLO, the wrapper generates synthetic
-10×10 px bounding boxes around each point.
+**2 · Preprocess** — creates `data/splits/<name>/annotations.csv` and copies images
 
 ```bash
-# Download all files from https://doi.org/10.5061/dryad.8931zcrv8
-# into data/raw/qian_penguins/ (4 zips + 4 JSONs), then:
+python scripts/datasets_processing/preprocess_eikelboom.py
 python scripts/datasets_processing/preprocess_qian.py
+python scripts/datasets_processing/preprocess_waid.py
+python scripts/datasets_processing/preprocess_delplanque.py
+```
+
+**3 · Convert to YOLO format** (YOLOv8 only — CSRNet does not need this step)
+
+```bash
 PYTHONPATH=src python scripts/datasets_processing/convert_dataset.py \
-    --dataset qian_penguins --format yolo \
-    --root data/splits/qian_penguins --output data/yolo/qian_penguins
+    --dataset eikelboom --format yolo \
+    --root data/splits/eikelboom --output data/yolo/eikelboom
 ```
 
-### How to train
+Repeat with `--dataset delplanque`, `--dataset waid`, `--dataset qian_penguins` as needed.
 
-#### YOLOv8
+#### Annotation formats
 
-```bash
-# Locally
-PYTHONPATH=src python scripts/train/yolov8/train_eikelboom.py
-
-# On the cluster
-sbatch sbatch_scripts/train_yolov8_eikelboom.sh
-```
-
-Results are written to `results/yolov8/<dataset>/`.
-
-#### CSRNet
-
-```bash
-# Locally
-PYTHONPATH=src python scripts/train/csrnet/train_qian.py
-
-# On the cluster
-sbatch sbatch_scripts/train_csrnet_qian.sh
-```
-
-Best checkpoint is saved to `results/csrnet/qian_penguins/best.pth`. Training prints `val_MAE` and `val_RMSE` each epoch and stops early after 20 epochs without improvement (patience configurable in the script).
+| Dataset type | File columns | Used by |
+|---|---|---|
+| Box (Eikelboom, Delplanque, WAID) | `image_path, x1, y1, x2, y2, species, split` | YOLOv8 directly; CSRNet via box centroids |
+| Point (Qian Penguins) | `image_path, x, y, species, colony, split` | CSRNet directly; YOLOv8 via synthetic 10×10 px boxes |
 
 ---
 
 ## Key design notes
 
-- **All species → single class.** Both models treat every animal as class 0/1 — the task is counting, not species classification.
+- **All species → single class.** Both models treat every animal as class 0/1 — the task is counting, not classification.
 - **Density map generation.** Adaptive Gaussian sigma per point: `σ = 0.3 × mean_distance_to_3_nearest_neighbours` (Hamrouni et al. 2020). Single-point images use a fixed σ = 15 px.
 - **CSRNet output resolution.** 1/8 of input (VGG pool1 × pool2 × pool3). A 512×512 patch produces a 64×64 density map. `density_map.sum() = predicted count`.
-- **Box-only datasets with CSRNet.** `DensityMapDataset` automatically computes bounding-box centroids and uses them as pseudo-points when no point annotations are available.
+- **Density map downsampling.** Full-resolution GT map is average-pooled by 8 and multiplied by 64 to preserve the integral before computing MSE loss.
+- **Box-only datasets with CSRNet.** `DensityMapDataset` automatically computes bounding-box centroids as pseudo-points when no point annotations are available.
