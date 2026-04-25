@@ -95,20 +95,23 @@ def run_inference(model, dataset, conf, iou, imgsz):
     return image_ids, pred_counts, gt_counts, image_paths
 
 
-def get_or_make_bucket_yaml(data_yaml, split, image_paths, bucket_root, bucket_name, force=False):
+def get_or_make_bucket_yaml(data_yaml, split, image_ids, bucket_root, bucket_name, force=False):
     """Return path to a per-bucket data.yaml, creating it only if missing.
 
     Writes two files under bucket_root:
-      - {split}_{bucket}.txt : one image path per line (absolute paths)
+      - {split}_{bucket}.txt : one image path per line (absolute paths, pointing
+        into the YOLO dataset structure so labels are auto-resolved)
       - {split}_{bucket}.yaml: data.yaml pointing to the .txt for this split
 
     YOLO auto-resolves labels via the /images/ -> /labels/ convention on each
-    listed path, so no label copying is needed.
+    listed path, so the paths must point into the YOLO dataset structure
+    (data/yolo/<dataset>/images/<split>/...), NOT into the Python dataset
+    structure (data/splits/...).
 
     args:
         data_yaml: path to the original data.yaml (used as template)
         split: "train", "val", or "test"
-        image_paths: list of absolute image paths for this bucket
+        image_ids: list of image IDs (stems, no extension) for this bucket
         bucket_root: directory where the bucket yamls live (persisted on disk)
         bucket_name: name of the bucket (used as filename suffix)
         force: if True, regenerate the files even if they already exist
@@ -124,8 +127,17 @@ def get_or_make_bucket_yaml(data_yaml, split, image_paths, bucket_root, bucket_n
     with open(data_yaml) as f:
         cfg = yaml.safe_load(f)
 
+    # Resolve the YOLO images dir from the original yaml so we point to the
+    # right place (data/yolo/...), where labels exist alongside.
+    base = Path(cfg.get("path", data_yaml.parent)).resolve()
+    yolo_images_dir = (base / cfg[split]).resolve()
+
+    # Build {stem -> full path} for all images in the YOLO split dir
+    stem_to_path = {p.stem: p for p in yolo_images_dir.iterdir() if p.is_file()}
+    bucket_paths = [stem_to_path[i] for i in image_ids if i in stem_to_path]
+
     # Write the image list
-    list_file.write_text("\n".join(str(p) for p in image_paths))
+    list_file.write_text("\n".join(str(p) for p in bucket_paths))
 
     # Build the per-bucket yaml: same nc/names/train/val/path as the original,
     # but the `split` entry points to our list file (absolute path). Ultralytics
@@ -235,23 +247,21 @@ def main():
     # Per-bucket detection metrics (density mode only)
     if args.mode == "density":
         buckets_ids = split_by_density(image_ids, pred_counts, gt_counts)
-        id_to_path = dict(zip(image_ids, image_paths))
         bucket_root = ROOT / "data" / "yolo" / args.test_dataset / "buckets"
 
         print("\nRunning Ultralytics val() — per bucket...")
         for bucket_name, bucket_data in buckets_ids.items():
             ids = bucket_data["image_ids"]
-            paths = [id_to_path[i] for i in ids if i in id_to_path]
-            if not paths:
+            if not ids:
                 print(f"  [{bucket_name}] empty — skipped")
                 detection_results[bucket_name] = None
                 continue
             sub_yaml = get_or_make_bucket_yaml(
-                data_yaml, args.split, paths,
+                data_yaml, args.split, ids,
                 bucket_root, bucket_name,
                 force=args.rebuild_buckets,
             )
-            print(f"  [{bucket_name}] running val() on {len(paths)} images...")
+            print(f"  [{bucket_name}] running val() on {len(ids)} images...")
             sub = model.val(data=str(sub_yaml), split=args.split, imgsz=args.imgsz)
             detection_results[bucket_name] = val_to_dict(sub)
 
