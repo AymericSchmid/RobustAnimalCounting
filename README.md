@@ -142,7 +142,7 @@ The `evaluation/` module is fully implemented:
 - [ ] **Train CSRNet** on Qian Penguins — submit `sbatch_scripts/train_csrnet_qian.sh`
 - [ ] **Run per-density evaluation** for YOLOv8 (script ready: `scripts/eval/yolov8/evaluate.py --mode density`)
 - [ ] **Run cross-domain evaluation** for YOLOv8 (same script: `--mode cross`, e.g. Eikelboom → Delplanque)
-- [ ] **Write a CSRNet evaluation script** mirroring `scripts/eval/yolov8/evaluate.py` — the evaluation functions (`evaluate_csrnet_density`, `evaluate_csrnet_cross`) already exist
+- [ ] **Run CSRNet evaluation** — script is ready at `scripts/eval/csrnet/evaluate.py` (see cluster workflow below)
 
 ### Nice to have
 
@@ -207,9 +207,27 @@ PYTHONPATH=src python scripts/eval/yolov8/evaluate.py \
 
 Results are saved as JSON in `results/yolov8/`. The script prints a summary table of MAE, RMSE, relative error, mAP@0.5, precision, and recall — overall and per density bucket.
 
-#### CSRNet — evaluation script still to be written
+#### CSRNet — in-domain with density buckets (for H2)
 
-The evaluation functions (`evaluate_csrnet_density`, `evaluate_csrnet_cross`) are ready in `src/animal_counting/evaluation/paradigm_runners.py`. A script mirroring `scripts/eval/yolov8/evaluate.py` needs to be written for CSRNet. For the time being, the notebook (Section 5b) can be used to inspect predictions visually after training.
+```bash
+PYTHONPATH=src python scripts/eval/csrnet/evaluate.py \
+    --train-dataset qian_penguins \
+    --test-dataset  qian_penguins \
+    --weights results/csrnet/qian_penguins/best.pth \
+    --mode density
+```
+
+#### CSRNet — cross-domain (for H4)
+
+```bash
+PYTHONPATH=src python scripts/eval/csrnet/evaluate.py \
+    --train-dataset qian_penguins \
+    --test-dataset  eikelboom \
+    --weights results/csrnet/qian_penguins/best.pth \
+    --mode cross
+```
+
+Use `--max-size 1024` (the default) to cap large aerial images and avoid running out of GPU memory. Results are saved as JSON in `results/csrnet/`.
 
 ---
 
