@@ -14,11 +14,11 @@ DATASETS = {
         "url": "https://github.com/xiaohuicui/WAID.git",
         "type": "git",
     },
-    #"aed": {
-    #    "url": "blabla",
-    #    "type": "file",
-    #    "filename": "aed.zip",
-    #},
+    "aed": {
+        "url": "https://www.kaggle.com/api/v1/datasets/download/davidrpugh/aerial-elephant-dataset",
+        "type": "file",
+        "filename": "aed.zip",
+    },
     "delplanque": {
         "url": "https://dataverse.uliege.be/api/access/datafile/11098",
         "type": "file",
