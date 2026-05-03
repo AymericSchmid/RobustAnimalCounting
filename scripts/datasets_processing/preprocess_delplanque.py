@@ -2,6 +2,7 @@ import shutil
 from pathlib import Path
 import pandas as pd
 
+from tiling_utils import tile_image_and_annotations
 
 SPLITS = ("train", "val", "test")
 
@@ -55,6 +56,12 @@ def main():
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     IMG_DIR = OUT_DIR / "images"
+    if IMG_DIR.exists():
+        for path in IMG_DIR.iterdir():
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
     IMG_DIR.mkdir(parents=True, exist_ok=True)
 
     annotations = []
@@ -63,22 +70,63 @@ def main():
         annotations.append(split_df)
 
     all_annotations = pd.concat(annotations, ignore_index=True)
-    copied_count = _copy_split_images(RAW_DIR, IMG_DIR, all_annotations)
+
+    # perform tiling instead of simple copying
+    df_tiled_rows = []
+
+    for split in SPLITS:
+        split_ann = all_annotations[all_annotations["split"] == split]
+        split_images = split_ann["image_path"].drop_duplicates().tolist()
+
+        for image_name in split_images:
+            src_path = RAW_DIR / split / image_name
+
+            if not src_path.exists():
+                print(f"Warning: {src_path} not found")
+                continue
+
+            # select annotations for this image
+            ann_rows = split_ann[split_ann["image_path"] == image_name]
+
+            try:
+                # perform tiling and collect annotations
+                tiled_anns = tile_image_and_annotations(
+                    src_image_path=src_path,
+                    annotations=ann_rows,
+                    image_name=image_name,
+                    output_dir=OUT_DIR,
+                    split=split,
+                    tile_size=1024,
+                    overlap=0.2,
+                    save_empty_tiles=False,
+                    bbox_columns=("x1", "y1", "x2", "y2"),
+                )
+                df_tiled_rows.extend(tiled_anns)
+            except (OSError, IOError) as e:
+                print(f"Warning: could not process {image_name}: {e}")
+                continue
 
     out_ann_path = OUT_DIR / "annotations.csv"
-    all_annotations.to_csv(out_ann_path, index=False)
+    if df_tiled_rows:
+        df_tiled = pd.DataFrame(df_tiled_rows)
+        df_tiled.to_csv(out_ann_path, index=False)
+    else:
+        print("Warning: no tiled annotations generated")
 
     print("Delplanque preprocessing completed.")
     print(f"Annotations saved to: {out_ann_path}")
     print(f"Images directory: {IMG_DIR}")
-    print(f"Copied {copied_count} images")
 
     for split in SPLITS:
-        split_ann = all_annotations[all_annotations["split"] == split]
-        print(
-            f"- {split}: {split_ann['image_path'].nunique()} images, "
-            f"{len(split_ann)} boxes"
-        )
+        if df_tiled_rows:
+            split_ann = [r for r in df_tiled_rows if r["split"] == split]
+            split_images = set(r["image_path"] for r in split_ann)
+            print(
+                f"- {split}: {len(split_images)} tiles, "
+                f"{len(split_ann)} annotations"
+            )
+        else:
+            print(f"- {split}: (no data)")
     
 if __name__ == "__main__":
     main()

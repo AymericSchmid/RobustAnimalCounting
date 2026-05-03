@@ -109,6 +109,7 @@ class CSRNetCountingModel(BaseCountingModel):
         patience: int = 20,
         output_dir: str | Path | None = None,
         num_workers: int = 4,
+        resume: bool = True,
         **kwargs: Any,
     ) -> Mapping[str, float]:
         """
@@ -127,19 +128,27 @@ class CSRNetCountingModel(BaseCountingModel):
             beta:          Gaussian sigma scale factor (sigma = beta * mean_k_dist).
             k:             Number of nearest neighbours for sigma estimation.
             patience:      Early-stopping patience (epochs without val MAE improvement).
-            output_dir:    Directory where best.pth is written.
+            output_dir:    Directory where best.pth and checkpoints are written.
             num_workers:   DataLoader worker processes.
+            resume:        If True, resume from checkpoint if one exists.
         """
         output_dir = Path(output_dir) if output_dir else Path("results/csrnet")
         output_dir.mkdir(parents=True, exist_ok=True)
+        checkpoint_dir = output_dir / "checkpoints"
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         train_dm = DensityMapDataset(
             train_dataset, patch_size=patch_size, augment=True,
             density_scale=density_scale, beta=beta, k=k,
         )
         val_dm = DensityMapDataset(
-            val_dataset, patch_size=patch_size, augment=False,
-            density_scale=density_scale, beta=beta, k=k,
+            val_dataset,
+            patch_size=patch_size,
+            augment=False,
+            full_image=True,
+            density_scale=density_scale,
+            beta=beta,
+            k=k,
         )
 
         train_loader = DataLoader(
@@ -157,8 +166,20 @@ class CSRNetCountingModel(BaseCountingModel):
 
         best_mae = float("inf")
         no_improve = 0
+        start_epoch = 1
 
-        for epoch in range(1, epochs + 1):
+        # Try to resume from checkpoint
+        latest_checkpoint = self._find_latest_checkpoint(checkpoint_dir)
+        if resume and latest_checkpoint:
+            print(f"Resuming from checkpoint: {latest_checkpoint}")
+            checkpoint = self.load_checkpoint(latest_checkpoint)
+            start_epoch = checkpoint["epoch"] + 1
+            best_mae = checkpoint["best_mae"]
+            no_improve = checkpoint["no_improve"]
+            optimizer.load_state_dict(checkpoint["optimizer_state"])
+            print(f"  Resuming from epoch {start_epoch} (best_mae={best_mae:.2f}, no_improve={no_improve})")
+
+        for epoch in range(start_epoch, epochs + 1):
             train_loss = self._train_epoch(train_loader, optimizer)
             val_mae, val_rmse = self._validate(val_loader)
 
@@ -179,8 +200,25 @@ class CSRNetCountingModel(BaseCountingModel):
                     print(f"Early stopping at epoch {epoch} (no improvement for {patience} epochs).")
                     break
 
+            # Save checkpoint after every 5 epochs
+            if epoch % 5 == 0:
+                self.save_checkpoint(
+                    checkpoint_dir / f"checkpoint_epoch_{epoch:03d}.pth",
+                    epoch=epoch,
+                    best_mae=best_mae,
+                    no_improve=no_improve,
+                    optimizer_state=optimizer.state_dict(),
+                )
+
+                # delete previous checkpoints to save space
+                self._cleanup_checkpoints(checkpoint_dir, keep_last_n=2)
+
         self.load(output_dir / "best.pth")
         print(f"Training complete. Best val MAE: {best_mae:.2f}")
+        
+        # Clean up checkpoints after successful completion
+        self._cleanup_checkpoints(checkpoint_dir)
+        
         return {"best_val_mae": best_mae}
 
     def _train_epoch(self, loader: DataLoader, optimizer: torch.optim.Optimizer) -> float:
@@ -202,11 +240,11 @@ class CSRNetCountingModel(BaseCountingModel):
         return total_loss / len(loader.dataset)
 
     def _validate(self, loader: DataLoader) -> tuple[float, float]:
-        self.net.eval()
         mae_sum = 0.0
         mse_sum = 0.0
         n = 0
 
+        self.net.eval()
         with torch.no_grad():
             for images, density_maps in loader:
                 images = images.to(self.device)
@@ -216,7 +254,7 @@ class CSRNetCountingModel(BaseCountingModel):
                 pred_count = pred.sum().item()
                 gt_count = density_maps.sum().item()
 
-                err = abs(pred_count - gt_count)
+                err = abs(float(pred_count) - float(gt_count))
                 mae_sum += err
                 mse_sum += err ** 2
                 n += 1
@@ -271,3 +309,66 @@ class CSRNetCountingModel(BaseCountingModel):
     def load(self, path: str | Path) -> None:
         state_dict = torch.load(path, map_location=self.device, weights_only=True)
         self.net.load_state_dict(state_dict)
+
+    def save_checkpoint(
+        self,
+        path: str | Path,
+        epoch: int,
+        best_mae: float,
+        no_improve: int,
+        optimizer_state: dict,
+    ) -> None:
+        """Save full training checkpoint with model, optimizer, and training state."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
+        checkpoint = {
+            "epoch": epoch,
+            "model_state": self.net.state_dict(),
+            "optimizer_state": optimizer_state,
+            "best_mae": best_mae,
+            "no_improve": no_improve,
+        }
+        torch.save(checkpoint, path)
+
+    def load_checkpoint(self, path: str | Path) -> dict:
+        """Load full training checkpoint."""
+        checkpoint = torch.load(path, map_location=self.device)
+        self.net.load_state_dict(checkpoint["model_state"])
+        return checkpoint
+
+    @staticmethod
+    def _find_latest_checkpoint(checkpoint_dir: Path) -> Path | None:
+        """Find the latest checkpoint by epoch number."""
+        checkpoint_dir = Path(checkpoint_dir)
+        if not checkpoint_dir.exists():
+            return None
+        
+        checkpoints = list(checkpoint_dir.glob("checkpoint_epoch_*.pth"))
+        if not checkpoints:
+            return None
+        
+        # Sort by epoch number and return the latest
+        checkpoints.sort(
+            key=lambda p: int(p.stem.split("_")[-1]),
+            reverse=True
+        )
+        return checkpoints[0]
+
+    @staticmethod
+    def _cleanup_checkpoints(checkpoint_dir: Path, keep_last_n: int = 3) -> None:
+        """Remove old checkpoints, keeping only the last N."""
+        checkpoint_dir = Path(checkpoint_dir)
+        if not checkpoint_dir.exists():
+            return
+        
+        checkpoints = sorted(
+            checkpoint_dir.glob("checkpoint_epoch_*.pth"),
+            key=lambda p: int(p.stem.split("_")[-1]),
+            reverse=True
+        )
+        
+        # Remove all but the last keep_last_n checkpoints
+        for checkpoint in checkpoints[keep_last_n:]:
+            checkpoint.unlink()
+            print(f"Cleaned up: {checkpoint.name}")

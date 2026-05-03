@@ -1,10 +1,10 @@
 #!/bin/bash
 
-#SBATCH --time=12:00:00
+#SBATCH --time=6:00:00
 #SBATCH --partition=gpu-invest
 #SBATCH --qos=job_gpu_preemptable
 #SBATCH --account=gratis
-#SBATCH --gres=gpu:rtx4090:1
+#SBATCH --gres=gpu:a100:1
 #SBATCH --mem-per-gpu=64G
 #SBATCH --cpus-per-task=4
 #SBATCH --output=/storage/homefs/as26q834/RobustAnimalCounting/sbatch_scripts/logs/%x_%j.logs
@@ -16,5 +16,6 @@ module load Anaconda3
 eval "$(conda shell.bash hook)"
 conda activate animal_counting
 
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 cd /storage/homefs/as26q834/RobustAnimalCounting
 PYTHONPATH=src python $PYTHON_SCRIPT

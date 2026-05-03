@@ -1,15 +1,21 @@
 from pathlib import Path
 
 import torch
+import argparse
 
 from animal_counting.datasets.eikelboom import EikelboomDataset
 from animal_counting.models.csrnet import CSRNetCountingModel
 
 
 def main():
+    arg_parser = argparse.ArgumentParser(description="Train CSRNet on Eikelboom dataset")
+    arg_parser.add_argument("--override_data_root", type=str, default=None, help="Override default data root")
+
     ROOT = Path(__file__).resolve().parents[3]
-    DATA_ROOT = ROOT / "data" / "splits" / "eikelboom"
     OUTPUT_DIR = ROOT / "results" / "csrnet" / "eikelboom"
+    data_root = ROOT / "data" / "splits" / "eikelboom"
+    if arg_parser.parse_args().override_data_root is not None:
+        data_root = Path(arg_parser.parse_args().override_data_root)
 
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -25,16 +31,16 @@ def main():
         "beta": 0.3,
         "k": 3,
         "patience": 20,
-        "num_workers": 4,
+        "num_workers": 8,
     }
 
     print(f"Device : {DEVICE}")
-    print(f"Data   : {DATA_ROOT}")
+    print(f"Data   : {data_root}")
     print(f"Output : {OUTPUT_DIR}")
     print(f"Config : {CFG}")
 
-    train_dataset = EikelboomDataset(root=DATA_ROOT, split="train")
-    val_dataset = EikelboomDataset(root=DATA_ROOT, split="val")
+    train_dataset = EikelboomDataset(root=data_root, split="train")
+    val_dataset = EikelboomDataset(root=data_root, split="val")
 
     print(f"Train images: {len(train_dataset)} | Val images: {len(val_dataset)}")
 

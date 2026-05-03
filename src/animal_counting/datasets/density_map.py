@@ -96,6 +96,7 @@ class DensityMapDataset(Dataset):
         dataset: BaseAnimalCountingDataset,
         patch_size: int = 512,
         augment: bool = False,
+        full_image: bool = False,
         density_scale: int = 8,
         beta: float = 0.3,
         k: int = 3,
@@ -103,6 +104,7 @@ class DensityMapDataset(Dataset):
         self.dataset = dataset
         self.patch_size = patch_size
         self.augment = augment
+        self.full_image = full_image
         self.density_scale = density_scale
         self.beta = beta
         self.k = k
@@ -133,31 +135,42 @@ class DensityMapDataset(Dataset):
 
         W, H = image.size
 
-        # --- Crop or resize to patch_size ---
-        if W >= self.patch_size and H >= self.patch_size:
-            left = random.randint(0, W - self.patch_size)
-            top = random.randint(0, H - self.patch_size)
-            image = TF.crop(image, top, left, self.patch_size, self.patch_size)
-            if len(points) > 0:
-                mask = (
-                    (points[:, 0] >= left)
-                    & (points[:, 0] < left + self.patch_size)
-                    & (points[:, 1] >= top)
-                    & (points[:, 1] < top + self.patch_size)
-                )
-                points = points[mask].copy()
-                if len(points) > 0:
-                    points[:, 0] -= left
-                    points[:, 1] -= top
+        # --- Spatial transform: either random patch (train) or full image (val/test) ---
+        if self.full_image:
+            crop_H, crop_W = H, W
         else:
-            scale_x = self.patch_size / W
-            scale_y = self.patch_size / H
-            image = TF.resize(image, (self.patch_size, self.patch_size))
-            if len(points) > 0:
-                points[:, 0] *= scale_x
-                points[:, 1] *= scale_y
+            if W >= self.patch_size and H >= self.patch_size:
+                left = random.randint(0, W - self.patch_size)
+                top = random.randint(0, H - self.patch_size)
+                image = TF.crop(image, top, left, self.patch_size, self.patch_size)
+                if len(points) > 0:
+                    mask = (
+                        (points[:, 0] >= left)
+                        & (points[:, 0] < left + self.patch_size)
+                        & (points[:, 1] >= top)
+                        & (points[:, 1] < top + self.patch_size)
+                    )
+                    points = points[mask].copy()
+                    if len(points) > 0:
+                        points[:, 0] -= left
+                        points[:, 1] -= top
+            else:
+                scale_x = self.patch_size / W
+                scale_y = self.patch_size / H
+                image = TF.resize(image, (self.patch_size, self.patch_size))
+                if len(points) > 0:
+                    points[:, 0] *= scale_x
+                    points[:, 1] *= scale_y
 
-        crop_H = crop_W = self.patch_size
+            crop_H = crop_W = self.patch_size
+
+        # Pad to multiples of density_scale so output maps are aligned.
+        pad_h = (self.density_scale - (crop_H % self.density_scale)) % self.density_scale
+        pad_w = (self.density_scale - (crop_W % self.density_scale)) % self.density_scale
+        if pad_h > 0 or pad_w > 0:
+            image = TF.pad(image, [0, 0, pad_w, pad_h], fill=0)
+            crop_H += pad_h
+            crop_W += pad_w
 
         # --- Augmentation: random horizontal flip ---
         if self.augment and random.random() > 0.5:
