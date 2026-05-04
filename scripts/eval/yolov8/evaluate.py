@@ -38,6 +38,7 @@ from animal_counting.datasets.delplanque import DelplanqueDataset
 from animal_counting.datasets.eikelboom import EikelboomDataset
 from animal_counting.datasets.qian_penguins import QianPenguinsDataset
 from animal_counting.datasets.waid import WAIDDataset
+from animal_counting.datasets.aed import AEDDataset
 from animal_counting.evaluation import (
     evaluate_yolo_cross,
     evaluate_yolo_density,
@@ -51,6 +52,7 @@ DATASET_REGISTRY = {
     "delplanque": DelplanqueDataset,
     "waid": WAIDDataset,
     "qian_penguins": QianPenguinsDataset,
+    "aed": AEDDataset,
 }
 
 

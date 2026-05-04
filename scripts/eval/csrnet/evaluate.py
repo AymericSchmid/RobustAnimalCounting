@@ -41,6 +41,7 @@ from animal_counting.datasets.density_map import generate_density_map
 from animal_counting.datasets.eikelboom import EikelboomDataset
 from animal_counting.datasets.qian_penguins import QianPenguinsDataset
 from animal_counting.datasets.waid import WAIDDataset
+from animal_counting.datasets.aed import AEDDataset
 from animal_counting.evaluation import (
     evaluate_csrnet_cross,
     evaluate_csrnet_density,
@@ -52,6 +53,7 @@ DATASET_REGISTRY = {
     "delplanque": DelplanqueDataset,
     "waid": WAIDDataset,
     "qian_penguins": QianPenguinsDataset,
+    "aed": AEDDataset,
 }
 
 DENSITY_SCALE = 8  # must match the CSRNet frontend stride (pool1 * pool2 * pool3)
